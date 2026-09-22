@@ -1,0 +1,29 @@
+{
+  "name": "greencode",
+  "version": "1.0.0",
+  "description": "Sistema CLI de gestão de logística reversa de resíduos eletrônicos",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "jest"
+  },
+  "keywords": [
+    "greencode",
+    "logistica",
+    "residuos-eletronicos",
+    "cli"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.2",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}

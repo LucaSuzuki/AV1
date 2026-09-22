@@ -1,0 +1,99 @@
+import { createHash, randomUUID } from 'node:crypto';
+
+import { Credencial } from './Credencial';
+import { Sessao } from './Sessao';
+import { PapelUsuario } from '../enums/enums-domino';
+import { RepositorioArquivo } from '../infra/RepositorioArquivo';
+
+export class ServicoAutenticacao {
+  credenciais: Credencial[];
+  sessoesAtivas: Sessao[];
+  repositorio: RepositorioArquivo;
+
+  constructor(repositorio: RepositorioArquivo) {
+    this.repositorio = repositorio;
+    this.credenciais = [];
+    this.sessoesAtivas = [];
+  }
+
+  registrarCredencial(credencial: Credencial): void {
+    this.credenciais.push(credencial);
+  }
+
+  obterSessaoAtiva(token: string): Sessao | null {
+    const sessao = this.sessoesAtivas.find((item) => item.token === token);
+    if (!sessao || !sessao.isValida()) {
+      if (sessao) {
+        this.sessoesAtivas = this.sessoesAtivas.filter((item) => item.token !== token);
+      }
+      return null;
+    }
+    return sessao;
+  }
+
+  usuarioPossuiPapel(token: string, papel: PapelUsuario): boolean {
+    const sessao = this.obterSessaoAtiva(token);
+    if (!sessao) return false;
+    return sessao.papel === papel;
+  }
+
+  autenticar(usuario: string, senha: string): boolean {
+    const cred = this.credenciais.find((item) => item.usuario === usuario);
+    return !!cred && cred.verificarSenha(senha);
+  }
+
+  renovarToken(token: string): string {
+    const sessao = this.obterSessaoAtiva(token);
+    if (!sessao) {
+      throw new Error('Sessão inválida para renovação.');
+    }
+
+    const novoToken = sessao.renovar();
+    sessao.token = novoToken;
+    return novoToken;
+  }
+
+  login(usuario: string, senha: string): Sessao {
+    const cred = this.credenciais.find((item) => item.usuario === usuario);
+    if (!cred || !cred.verificarSenha(senha)) {
+      throw new Error('Credenciais inválidas.');
+    }
+
+    const sessaoExistente = this.sessoesAtivas.find((item) => item.usuario === usuario && item.isValida());
+    if (sessaoExistente) {
+      return sessaoExistente;
+    }
+
+    const agora = new Date();
+    const sessao = new Sessao({
+      token: randomUUID(),
+      usuario,
+      papel: cred.papel,
+      criacao: agora,
+      expiracao: new Date(agora.getTime() + 30 * 60 * 1000),
+    });
+
+    this.sessoesAtivas.push(sessao);
+    cred.atualizarUltimoAcesso();
+    return sessao;
+  }
+
+  logout(token: string): boolean {
+    const index = this.sessoesAtivas.findIndex((sessao) => sessao.token === token);
+    if (index === -1) return false;
+    this.sessoesAtivas.splice(index, 1);
+    return true;
+  }
+
+  validarToken(token: string): boolean {
+    return !!this.obterSessaoAtiva(token);
+  }
+
+  alterarSenha(usuario: string, senhaAntiga: string, senhaNova: string): boolean {
+    const cred = this.credenciais.find((item) => item.usuario === usuario);
+    if (!cred) return false;
+    if (!cred.verificarSenha(senhaAntiga)) return false;
+    cred.hashSenha = createHash('sha256').update(`${cred.salt}:${senhaNova}`).digest('hex');
+    return true;
+  }
+}
