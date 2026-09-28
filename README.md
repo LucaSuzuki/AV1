@@ -136,3 +136,5 @@ O projeto usa criptografia AES-256 para proteger dados persistidos em arquivo e 
 ## Licença
 
 ISC
+
+# [Gerson](https://youtu.be/u3H8O8RJp3M?si=QgdfEQUHSrQe6u9x)
