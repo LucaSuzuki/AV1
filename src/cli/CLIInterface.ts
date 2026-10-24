@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline/promises';
 
 import { ServicoAutenticacao } from '../auth/ServicoAutenticacao';
+import { Credencial } from '../auth/Credencial';
 import { Sessao } from '../auth/Sessao';
 import { PapelUsuario } from '../enums/enums-domino';
 import { ServicoOrganizacao } from '../services/ServicoOrganizacao';
@@ -35,7 +36,17 @@ export class CLIInterface {
 
   exibirMenuPorPapel(papel: PapelUsuario): string {
     const menus: Record<PapelUsuario, string[]> = {
-      [PapelUsuario.ADMINISTRADOR]: ['login', 'logout', 'organizacao cadastrar', 'lote criar', 'equipamento rastrear', 'relatorio status'],
+      [PapelUsuario.ADMINISTRADOR]: [
+        'login',
+        'logout',
+        'usuario cadastrar',
+        'usuario listar',
+        'usuario excluir',
+        'organizacao cadastrar',
+        'lote criar',
+        'equipamento rastrear',
+        'relatorio status',
+      ],
       [PapelUsuario.OPERADOR_CADASTRO]: ['login', 'logout', 'organizacao cadastrar', 'lote criar'],
       [PapelUsuario.GESTOR_ALMOXARIFADO]: ['login', 'logout', 'lote criar', 'equipamento rastrear'],
       [PapelUsuario.AUDITORIA]: ['login', 'logout', 'relatorio status', 'relatorio financeiro'],
@@ -50,7 +61,17 @@ export class CLIInterface {
       input: process.stdin as any,
       output: process.stdout,
       completer: (line: string): [string[], string] => {
-        const comandos = ['login', 'logout', 'organizacao cadastrar', 'lote criar', 'equipamento rastrear', 'relatorio status'];
+        const comandos = [
+          'login',
+          'logout',
+          'usuario cadastrar',
+          'usuario listar',
+          'usuario excluir',
+          'organizacao cadastrar',
+          'lote criar',
+          'equipamento rastrear',
+          'relatorio status',
+        ];
         const hits = comandos.filter((cmd) => cmd.startsWith(line.trim()));
         return [hits.length ? hits : comandos, line];
       },
@@ -99,10 +120,56 @@ export class CLIInterface {
     if (!this.sessaoAtual) {
       return 'AVISO: faça login antes de executar comandos do sistema.';
     }
+    if (!this.autenticacao.validarToken(this.sessaoAtual.token)) {
+      this.sessaoAtual = null;
+      return 'AVISO: sessão inválida ou expirada. Faça login novamente.';
+    }
 
     const recurso = comando;
     const acao = partes[1]?.toLowerCase() ?? '';
     const params = this.parseParametros(partes.slice(2));
+
+    if (recurso === 'usuario') {
+      if (this.sessaoAtual.papel !== PapelUsuario.ADMINISTRADOR) {
+        return 'ERRO: somente o administrador pode gerenciar usuários.';
+      }
+
+      if (acao === 'cadastrar') {
+        const usuario = params['usuario'] ?? params['u'] ?? '';
+        const senha = params['senha'] ?? params['s'] ?? '';
+        const papelInformado = (params['papel'] ?? params['p'] ?? '').toUpperCase();
+        const papel = Object.values(PapelUsuario).find((opcao) => opcao === papelInformado);
+        if (!usuario.trim() || !senha) {
+          return 'ERRO: uso correto: usuario cadastrar --usuario <nome> --senha <senha> --papel <papel>';
+        }
+        if (!papel) {
+          return `ERRO: papel inválido. Opções: ${Object.values(PapelUsuario).join(', ')}.`;
+        }
+        const credencial = new Credencial(usuario.trim(), senha, papel);
+        return this.autenticacao.registrarCredencial(credencial)
+          ? `SUCESSO: usuário ${usuario.trim()} cadastrado.`
+          : 'ERRO: usuário já cadastrado ou dados inválidos.';
+      }
+
+      if (acao === 'listar') {
+        const usuarios = this.autenticacao.listarUsuarios();
+        if (usuarios.length === 0) return 'INFO: nenhum usuário cadastrado.';
+        return usuarios
+          .map((usuario) => `${usuario.usuario} | ${usuario.papel} | último acesso: ${usuario.ultimoAcesso?.toISOString() ?? 'nunca'}`)
+          .join('\n');
+      }
+
+      if (acao === 'excluir') {
+        const usuario = params['usuario'] ?? params['u'] ?? '';
+        if (!usuario.trim()) return 'ERRO: uso correto: usuario excluir --usuario <nome>';
+        if (usuario.trim() === this.sessaoAtual.usuario) return 'ERRO: não é permitido excluir o usuário autenticado.';
+        return this.autenticacao.excluirCredencial(usuario.trim())
+          ? `SUCESSO: usuário ${usuario.trim()} excluído.`
+          : 'ERRO: usuário inexistente ou não é possível excluir o último administrador.';
+      }
+
+      return 'ERRO: uso correto: usuario <cadastrar|listar|excluir>.';
+    }
 
     if (recurso === 'organizacao' && acao === 'cadastrar') {
       const cnpj = params['cnpj'] ?? params['--cnpj'] ?? '';

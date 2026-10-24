@@ -12,12 +12,46 @@ export class ServicoAutenticacao {
 
   constructor(repositorio: RepositorioArquivo) {
     this.repositorio = repositorio;
-    this.credenciais = [];
+    this.credenciais = repositorio.listarEntidades('usuarios.json').map((dados) =>
+      Credencial.restaurar(dados as {
+        usuario: string;
+        hashSenha: string;
+        salt: string;
+        ultimoAcesso: Date | string | null;
+        papel: PapelUsuario;
+      }),
+    );
     this.sessoesAtivas = [];
   }
 
-  registrarCredencial(credencial: Credencial): void {
+  registrarCredencial(credencial: Credencial): boolean {
+    if (!credencial.usuario.trim() || credencial.verificarSenha('')) return false;
+    if (this.credenciais.some((item) => item.usuario === credencial.usuario)) return false;
     this.credenciais.push(credencial);
+    this.persistirCredenciais();
+    return true;
+  }
+
+  listarUsuarios(): Array<Pick<Credencial, 'usuario' | 'papel' | 'ultimoAcesso'>> {
+    return this.credenciais.map(({ usuario, papel, ultimoAcesso }) => ({ usuario, papel, ultimoAcesso }));
+  }
+
+  excluirCredencial(usuario: string): boolean {
+    const index = this.credenciais.findIndex((item) => item.usuario === usuario);
+    if (index === -1) return false;
+
+    const credencial = this.credenciais[index];
+    const quantidadeAdministradores = this.credenciais.filter((item) => item.papel === PapelUsuario.ADMINISTRADOR).length;
+    if (credencial.papel === PapelUsuario.ADMINISTRADOR && quantidadeAdministradores === 1) return false;
+
+    this.credenciais.splice(index, 1);
+    this.sessoesAtivas = this.sessoesAtivas.filter((sessao) => sessao.usuario !== usuario);
+    this.persistirCredenciais();
+    return true;
+  }
+
+  private persistirCredenciais(): void {
+    this.repositorio.salvarEntidade('usuarios.json', this.credenciais);
   }
 
   obterSessaoAtiva(token: string): Sessao | null {
@@ -75,6 +109,7 @@ export class ServicoAutenticacao {
 
     this.sessoesAtivas.push(sessao);
     cred.atualizarUltimoAcesso();
+    this.persistirCredenciais();
     return sessao;
   }
 

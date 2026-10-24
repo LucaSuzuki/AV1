@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -20,11 +21,15 @@ import { ServicoRelatorio } from '../src/services/ServicoRelatorio';
 import { CLIInterface } from '../src/cli/CLIInterface';
 
 describe('Greencode', () => {
-  const baseDir = path.join(process.cwd(), 'tests', 'tmp-data');
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'greencode-tests-'));
 
   beforeEach(() => {
     fs.rmSync(baseDir, { recursive: true, force: true });
     fs.mkdirSync(baseDir, { recursive: true });
+  });
+
+  afterAll(() => {
+    fs.rmSync(baseDir, { recursive: true, force: true });
   });
 
   it('provisiona primeiro administrador e autentica', () => {
@@ -182,6 +187,27 @@ describe('Greencode', () => {
     expect(auth.validarToken(tokenRenovado)).toBe(false);
   });
 
+  it('persiste credenciais, lista dados públicos e impede excluir o último administrador', () => {
+    const repo = new RepositorioArquivo(baseDir, new CriptografiaArquivo(), 'secret-key');
+    const auth = new ServicoAutenticacao(repo);
+    expect(auth.registrarCredencial(new Credencial('admin', 'senha123', PapelUsuario.ADMINISTRADOR))).toBe(true);
+    expect(auth.registrarCredencial(new Credencial('operador', 'senha456', PapelUsuario.OPERADOR_CADASTRO))).toBe(true);
+    expect(auth.registrarCredencial(new Credencial('operador', 'outra-senha', PapelUsuario.OPERADOR_CADASTRO))).toBe(false);
+
+    const authRecarregada = new ServicoAutenticacao(repo);
+    expect(authRecarregada.autenticar('operador', 'senha456')).toBe(true);
+    expect(authRecarregada.listarUsuarios()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ usuario: 'admin', papel: PapelUsuario.ADMINISTRADOR }),
+      expect.objectContaining({ usuario: 'operador', papel: PapelUsuario.OPERADOR_CADASTRO }),
+    ]));
+    expect(authRecarregada.listarUsuarios()[0]).not.toHaveProperty('hashSenha');
+    expect(authRecarregada.excluirCredencial('admin')).toBe(false);
+    const sessaoOperador = authRecarregada.login('operador', 'senha456');
+    expect(authRecarregada.excluirCredencial('operador')).toBe(true);
+    expect(authRecarregada.validarToken(sessaoOperador.token)).toBe(false);
+    expect(new ServicoAutenticacao(repo).autenticar('operador', 'senha456')).toBe(false);
+  });
+
   it('rastreia histórico completo de equipamento', () => {
     const repo = new RepositorioArquivo(baseDir, new CriptografiaArquivo(), 'secret-key');
     const servico = new ServicoEquipamento(repo);
@@ -310,5 +336,40 @@ describe('Greencode', () => {
 
     const relatorio = cli.processarComando('relatorio status');
     expect(relatorio).toContain('status');
+  });
+
+  it('permite ao administrador gerenciar usuários sem permitir autoexclusão', () => {
+    const repo = new RepositorioArquivo(baseDir, new CriptografiaArquivo(), 'secret-key');
+    const auth = new ServicoAutenticacao(repo);
+    auth.registrarCredencial(new Credencial('admin', 'senha123', PapelUsuario.ADMINISTRADOR));
+    const cli = new CLIInterface(
+      auth,
+      new ServicoOrganizacao(repo),
+      new ServicoLote(repo),
+      new ServicoEquipamento(repo),
+      new ServicoRelatorio(repo),
+    );
+
+    cli.processarComando('login admin senha123');
+    expect(cli.processarComando('usuario cadastrar --usuario auditor --senha senha456 --papel AUDITORIA')).toContain('SUCESSO');
+    expect(cli.processarComando('usuario listar')).toContain('auditor | AUDITORIA');
+    expect(cli.processarComando('usuario excluir --usuario admin')).toContain('não é permitido excluir');
+    expect(cli.processarComando('usuario excluir --usuario auditor')).toContain('SUCESSO');
+  });
+
+  it('impede que usuários não administradores gerenciem credenciais', () => {
+    const repo = new RepositorioArquivo(baseDir, new CriptografiaArquivo(), 'secret-key');
+    const auth = new ServicoAutenticacao(repo);
+    auth.registrarCredencial(new Credencial('operador', 'senha456', PapelUsuario.OPERADOR_CADASTRO));
+    const cli = new CLIInterface(
+      auth,
+      new ServicoOrganizacao(repo),
+      new ServicoLote(repo),
+      new ServicoEquipamento(repo),
+      new ServicoRelatorio(repo),
+    );
+
+    cli.processarComando('login operador senha456');
+    expect(cli.processarComando('usuario listar')).toContain('somente o administrador');
   });
 });

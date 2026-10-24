@@ -35,7 +35,9 @@ async function main(): Promise<void> {
   const repo = new RepositorioArquivo(dataDir, new CriptografiaArquivo(), chave);
 
   const autenticacao = new ServicoAutenticacao(repo);
-  autenticacao.registrarCredencial(new Credencial('admin', 'admin123', PapelUsuario.ADMINISTRADOR));
+  if (autenticacao.listarUsuarios().length === 0) {
+    autenticacao.registrarCredencial(new Credencial('admin', 'admin123', PapelUsuario.ADMINISTRADOR));
+  }
 
   const cli = new CLIInterface(
     autenticacao,

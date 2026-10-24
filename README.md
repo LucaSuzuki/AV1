@@ -9,6 +9,7 @@ O Greencode simula um fluxo operacional de recebimento, triagem, rastreio, autor
 ## Funcionalidades
 
 - Cadastro e autenticação de usuários
+- Gerenciamento administrativo de usuários (cadastro, listagem e exclusão)
 - Controle de papéis por perfil
 - Cadastro de organizações e contratos
 - Criação e triagem de lotes
@@ -98,25 +99,35 @@ npm test -- --runInBand --verbose
 login admin admin123
 ```
 
-2. Cadastre uma organização:
+2. Cadastre, liste ou exclua usuários (somente o administrador):
+
+```bash
+usuario cadastrar --usuario operador --senha "senha-segura" --papel OPERADOR_CADASTRO
+usuario listar
+usuario excluir --usuario operador
+```
+
+Papéis disponíveis: `ADMINISTRADOR`, `OPERADOR_CADASTRO`, `GESTOR_ALMOXARIFADO` e `AUDITORIA`.
+
+3. Cadastre uma organização:
 
 ```bash
 organizacao cadastrar --razao "Empresa CLI" --cnpj 12.345.678/0001-95 --ie 123456 --endereco "Rua CLI, 10" --telefone 11999999999 --email contato@cli.com
 ```
 
-3. Crie um lote:
+4. Crie um lote:
 
 ```bash
 lote criar --org org-default --nf NF-CLI-001 --transp LogiCLI --obs "lote cli"
 ```
 
-4. Cadastre um equipamento:
+5. Cadastre um equipamento:
 
 ```bash
 equipamento cadastrar --lote <id-do-lote> --tipo NOTEBOOK --marca Dell --modelo Latitude --ano 2024 --estado 1 --peso 2.5 --codigo CB-CLI-01 --posicao 1
 ```
 
-5. Consulte relatórios:
+6. Consulte relatórios:
 
 ```bash
 relatorio status

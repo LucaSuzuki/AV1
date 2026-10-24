@@ -17,6 +17,20 @@ export class Credencial {
     this.papel = papel;
   }
 
+  static restaurar(dados: {
+    usuario: string;
+    hashSenha: string;
+    salt: string;
+    ultimoAcesso: Date | string | null;
+    papel: PapelUsuario;
+  }): Credencial {
+    const credencial = new Credencial(dados.usuario, '', dados.papel);
+    credencial.hashSenha = dados.hashSenha;
+    credencial.salt = dados.salt;
+    credencial.ultimoAcesso = dados.ultimoAcesso ? new Date(dados.ultimoAcesso) : null;
+    return credencial;
+  }
+
   private gerarHash(senha: string, salt: string): string {
     return createHash('sha256').update(`${salt}:${senha}`).digest('hex');
   }
